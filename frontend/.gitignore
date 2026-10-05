@@ -36,3 +36,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.git
+.gitlite-data
+**/node_modules
+frontend/.next
+frontend/.next-dev
+frontend/.gitlite-classes
+**/.env*
