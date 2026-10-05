@@ -7,6 +7,8 @@ import commands.SwitchBranchCommand;
 import commands.CheckoutCommand;
 import commands.BranchCommand;
 import commands.BranchesCommand;
+import services.MoveService;
+import services.RemoveService;
 
 public class Main {
 
@@ -14,12 +16,14 @@ public class Main {
 
         if (args.length == 0) {
             printUsage();
+            System.exit(2);
             return;
         }
 
         String command = args[0].toLowerCase();
 
-        switch (command) {
+        try {
+            switch (command) {
 
             case "init":
 
@@ -30,8 +34,7 @@ public class Main {
             case "add":
 
                 if (args.length < 2) {
-                    System.out.println("Usage: java Main add <filename>");
-                    return;
+                    throw new IllegalArgumentException("Usage: java Main add <filename>");
                 }
 
                 AddCommand addCommand = new AddCommand();
@@ -41,23 +44,30 @@ public class Main {
             case "commit":
 
                 if (args.length < 2) {
-                    System.out.println("Usage: java Main commit \"Commit Message\"");
-                    return;
+                    throw new IllegalArgumentException("Usage: java Main commit \"Commit Message\"");
                 }
 
                 StringBuilder message = new StringBuilder();
-
+                String authorName = System.getProperty("user.name", "GitLite User");
+                String authorEmail = System.getProperty("user.email", "");
                 for (int i = 1; i < args.length; i++) {
-
-                    message.append(args[i]);
-
-                    if (i != args.length - 1) {
-                        message.append(" ");
+                    if (args[i].equals("--author-name") || args[i].equals("--author-email")) {
+                        if (i + 1 >= args.length) {
+                            throw new IllegalArgumentException(args[i] + " requires a value.");
+                        }
+                        if (args[i].equals("--author-name")) {
+                            authorName = args[++i];
+                        } else {
+                            authorEmail = args[++i];
+                        }
+                    } else {
+                        if (message.length() > 0) message.append(" ");
+                        message.append(args[i]);
                     }
                 }
 
                 CommitCommand commitCommand = new CommitCommand();
-                commitCommand.execute(message.toString());
+                commitCommand.execute(message.toString(), authorName, authorEmail);
 
                 break;
 
@@ -75,10 +85,7 @@ public class Main {
             case "checkout":
 
                 if (args.length < 2) {
-
-                    System.out.println("Usage: checkout <commit-id>");
-                    return;
-
+                    throw new IllegalArgumentException("Usage: checkout <commit-id>");
                 }
 
                 CheckoutCommand checkoutCommand =
@@ -91,10 +98,7 @@ public class Main {
             case "branch":
 
                 if (args.length < 2) {
-
-                    System.out.println("Usage: branch <branch-name>");
-                    return;
-
+                    throw new IllegalArgumentException("Usage: branch <branch-name>");
                 }
 
                 BranchCommand branchCommand =
@@ -113,10 +117,7 @@ public class Main {
             case "switch":
 
                 if (args.length < 2) {
-
-                    System.out.println("Usage: switch <branch-name>");
-                    return;
-
+                    throw new IllegalArgumentException("Usage: switch <branch-name>");
                 }
 
                 SwitchBranchCommand switchBranchCommand =
@@ -126,11 +127,28 @@ public class Main {
 
                 break;
 
+            case "remove":
+            case "rm":
+                if (args.length < 2) {
+                    throw new IllegalArgumentException("Usage: remove working/<filename>");
+                }
+                new RemoveService().remove(args[1]);
+                break;
+
+            case "move":
+            case "mv":
+                if (args.length < 3) {
+                    throw new IllegalArgumentException("Usage: move working/<old-path> working/<new-path>");
+                }
+                new MoveService().move(args[1], args[2]);
+                break;
+
             default:
-
-                System.out.println("Unknown command: " + command);
-                printUsage();
-
+                throw new IllegalArgumentException("Unknown command: " + command);
+            }
+        } catch (RuntimeException error) {
+            System.err.println(error.getMessage());
+            System.exit(1);
         }
 
     }
@@ -142,6 +160,7 @@ public class Main {
         System.out.println("==================================");
         System.out.println("Available Commands:");
         System.out.println();
+
         System.out.println("init");
         System.out.println("    Initialize a new repository");
         System.out.println();

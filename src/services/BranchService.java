@@ -11,6 +11,10 @@ public class BranchService {
             new FileManager();
 
     public void createBranch(String branchName) {
+        validateBranchName(branchName);
+        if (!fileManager.exists(RepositoryConstants.REPOSITORY_FOLDER)) {
+            throw new IllegalStateException("Repository not initialized.");
+        }
 
         String branchFile =
                 RepositoryConstants.REPOSITORY_FOLDER
@@ -23,8 +27,7 @@ public class BranchService {
 
         if (file.exists()) {
 
-            System.out.println("Branch already exists.");
-            return;
+            throw new IllegalArgumentException("Branch already exists: " + branchName);
 
         }
 
@@ -54,6 +57,9 @@ public class BranchService {
     }
 
     public void listBranches() {
+        if (!fileManager.exists(RepositoryConstants.REPOSITORY_FOLDER)) {
+            throw new IllegalStateException("Repository not initialized.");
+        }
 
         String currentBranch =
                 fileManager.readFile(
@@ -104,6 +110,15 @@ public class BranchService {
                 System.out.println("  " + branchName);
 
             }
+
+        }
+    }
+
+    static void validateBranchName(String branchName) {
+        if (branchName == null || !branchName.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,99}")) {
+            throw new IllegalArgumentException(
+                    "Branch names must start with a letter or number and contain only letters, numbers, dots, underscores, or hyphens."
+            );
         }
     }
 }

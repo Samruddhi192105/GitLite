@@ -11,6 +11,9 @@ public class RepositoryService {
     private final FileManager fileManager = new FileManager();
 
     public Repository initializeRepository() {
+        if (fileManager.exists(RepositoryConstants.REPOSITORY_FOLDER)) {
+            throw new IllegalStateException("Repository is already initialized.");
+        }
 
         // Create repository folder
         fileManager.createDirectory(

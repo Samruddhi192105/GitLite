@@ -7,9 +7,9 @@ public class CommitCommand {
     private final CommitService commitService =
             new CommitService();
 
-    public void execute(String message) {
+    public void execute(String message, String authorName, String authorEmail) {
 
-        commitService.commit(message);
+        commitService.commit(message, authorName, authorEmail);
 
     }
 

@@ -1,6 +1,7 @@
 package utils;
 
 import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
 
 public class HashUtil {
 
@@ -11,8 +12,7 @@ public class HashUtil {
             MessageDigest md =
                     MessageDigest.getInstance("SHA-256");
 
-            byte[] hash =
-                    md.digest(text.getBytes());
+            byte[] hash = md.digest(text.getBytes(StandardCharsets.UTF_8));
 
             StringBuilder builder =
                     new StringBuilder();
@@ -29,9 +29,7 @@ public class HashUtil {
         }
 
         catch (Exception e) {
-
-            return "";
-
+            throw new IllegalStateException("SHA-256 is not available.", e);
         }
 
     }

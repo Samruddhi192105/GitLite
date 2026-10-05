@@ -1,0 +1,78 @@
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  darkMode: "class",
+  content: [
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        gitlite: {
+          bg: "#0a0e17",
+          subtle: "#0f1524",
+          card: "#121a2d",
+          cardHover: "#18223c",
+          border: "#1e293b",
+          borderLight: "#26354f",
+          emerald: "#10b981",
+          emeraldHover: "#059669",
+          indigo: "#6366f1",
+          cyan: "#06b6d4",
+          violet: "#8b5cf6",
+          text: "#f8fafc",
+          textSecondary: "#94a3b8",
+          textMuted: "#64748b",
+        },
+        gh: {
+          bg: "#0a0e17",
+          subtle: "#0f1524",
+          header: "#0f1524",
+          border: "#1e293b",
+          borderLight: "#26354f",
+          text: "#f8fafc",
+          textSecondary: "#94a3b8",
+          textMuted: "#64748b",
+          link: "#38bdf8",
+          linkHover: "#06b6d4",
+          green: "#10b981",
+          greenHover: "#059669",
+          greenBorder: "rgba(16, 185, 129, 0.25)",
+          btnSecondary: "#161f33",
+          btnSecondaryHover: "#1e2b46",
+          btnSecondaryBorder: "#2a3a56",
+          danger: "#f43f5e",
+          dangerHover: "#e11d48",
+          warning: "#f59e0b",
+          purple: "#8b5cf6",
+          accent: "#6366f1",
+          codeBg: "#080c14",
+        },
+      },
+      fontFamily: {
+        mono: [
+          "ui-monospace",
+          "SFMono-Regular",
+          "SF Mono",
+          "Menlo",
+          "Consolas",
+          "Liberation Mono",
+          "monospace",
+        ],
+        sans: [
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "Noto Sans",
+          "Helvetica",
+          "Arial",
+          "sans-serif",
+        ],
+      },
+    },
+  },
+  plugins: [],
+};
+export default config;

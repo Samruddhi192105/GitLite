@@ -4,44 +4,54 @@ import constants.RepositoryConstants;
 import storage.FileManager;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class StageService {
 
     private final FileManager fileManager = new FileManager();
 
     public void addFile(String filePath) {
-
-        // Check repository
-        if (!fileManager.exists(RepositoryConstants.REPOSITORY_FOLDER)) {
-            System.out.println("Repository not initialized.");
-            return;
+        Path repositoryRoot = Path.of("").toAbsolutePath().normalize();
+        Path repositoryDirectory = repositoryRoot.resolve(RepositoryConstants.REPOSITORY_FOLDER);
+        if (!Files.isDirectory(repositoryDirectory)) {
+            throw new IllegalStateException("Repository not initialized.");
         }
 
-        // Check file
-        if (!fileManager.exists(filePath)) {
-            System.out.println("File not found.");
-            return;
+        Path source = repositoryRoot.resolve(filePath).normalize();
+        Path workingDirectory = repositoryRoot.resolve("working");
+        if (!source.startsWith(workingDirectory) || source.startsWith(repositoryDirectory)) {
+            throw new IllegalArgumentException("Only files inside working/ can be staged.");
+        }
+        if (Files.isSymbolicLink(workingDirectory)) {
+            throw new IllegalArgumentException("The working directory cannot be a symbolic link.");
+        }
+        Path cursor = workingDirectory;
+        for (Path segment : workingDirectory.relativize(source)) {
+            cursor = cursor.resolve(segment);
+            if (Files.isSymbolicLink(cursor)) {
+                throw new IllegalArgumentException("Symbolic links cannot be staged.");
+            }
+        }
+        if (!Files.isRegularFile(source)) {
+            throw new IllegalArgumentException("File not found: " + filePath);
         }
 
-        File source = new File(filePath);
-
-        String destination =
-                RepositoryConstants.REPOSITORY_FOLDER
-                + File.separator
-                + RepositoryConstants.STAGING_FOLDER
-                + File.separator
-                + source.getName();
-
-        boolean success = fileManager.copyFile(
-                source.getPath(),
-                destination
-        );
-
-        if (success) {
-            System.out.println(source.getName() + " staged successfully.");
-        } else {
-            System.out.println("Failed to stage file.");
+        Path stagingDirectory = repositoryDirectory.resolve(RepositoryConstants.STAGING_FOLDER);
+        Path stagedPath = repositoryRoot.relativize(source);
+        Path stagedFile = stagingDirectory.resolve(stagedPath).normalize();
+        if (!stagedFile.startsWith(stagingDirectory)) {
+            throw new IllegalArgumentException("Invalid staging path.");
         }
+
+        try {
+            Files.createDirectories(stagedFile.getParent());
+        } catch (IOException error) {
+            throw new IllegalStateException("Could not create staging directory.", error);
+        }
+        fileManager.copyFile(source.toString(), stagedFile.toString());
+        System.out.println(stagedPath + " staged successfully.");
     }
 
 }

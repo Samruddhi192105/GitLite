@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gh-bg: #0a0e17;
+  --gh-subtle: #0f1524;
+  --gh-border: #1e293b;
+  --gh-border-light: #26354f;
+  --gh-text: #f8fafc;
+  --gh-text-secondary: #94a3b8;
+  --gh-text-muted: #64748b;
+  --gh-link: #38bdf8;
+  --gh-green: #10b981;
+}
+
+.light {
+  --gh-bg: #f8fafc;
+  --gh-subtle: #f1f5f9;
+  --gh-border: #cbd5e1;
+  --gh-border-light: #e2e8f0;
+  --gh-text: #0f172a;
+  --gh-text-secondary: #475569;
+  --gh-text-muted: #64748b;
+  --gh-link: #0284c7;
+  --gh-green: #059669;
+}
+
+body {
+  background-color: var(--gh-bg);
+  color: var(--gh-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+  background-image: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.05) 0%, transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Custom GitLite Modern Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0e17;
+}
+
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* GitHub Markdown Styles */
+.markdown-body {
+  color: #e6edf3;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.light .markdown-body {
+  color: #1f2328;
+}
+
+.markdown-body h1 {
+  font-size: 1.85rem;
+  font-weight: 600;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #21262d;
+  margin-top: 24px;
+  margin-bottom: 16px;
+}
+
+.markdown-body h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #21262d;
+  margin-top: 24px;
+  margin-bottom: 14px;
+}
+
+.markdown-body h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+.markdown-body p {
+  margin-bottom: 14px;
+}
+
+.markdown-body code {
+  background-color: rgba(110, 118, 129, 0.4);
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.markdown-body pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #161b22;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  margin-bottom: 16px;
+}
+
+.markdown-body ul {
+  padding-left: 2em;
+  list-style-type: disc;
+  margin-bottom: 14px;
+}
+
+.markdown-body ol {
+  padding-left: 2em;
+  list-style-type: decimal;
+  margin-bottom: 14px;
+}
+
+.markdown-body li {
+  margin-top: 0.25em;
+}
+
+.markdown-body blockquote {
+  padding: 0 1em;
+  color: #8b949e;
+  border-left: 0.25em solid #30363d;
+  margin-bottom: 16px;
+}
+
+/* Monospace font utility */
+.font-mono-code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}

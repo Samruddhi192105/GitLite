@@ -14,6 +14,7 @@ public class SwitchBranchService {
             new CheckoutService();
 
     public void switchBranch(String branchName) {
+        BranchService.validateBranchName(branchName);
 
         String branchFile =
                 RepositoryConstants.REPOSITORY_FOLDER
@@ -27,8 +28,7 @@ public class SwitchBranchService {
 
         if (!file.exists()) {
 
-            System.out.println("Branch does not exist.");
-            return;
+            throw new IllegalArgumentException("Branch does not exist: " + branchName);
 
         }
 
@@ -37,9 +37,9 @@ public class SwitchBranchService {
 
         // Restore files only if the branch has commits
         if (!commitId.isBlank()) {
-
             checkoutService.checkoutByCommitId(commitId);
-
+        } else {
+            checkoutService.checkoutEmptyBranch();
         }
 
         // Update HEAD with current branch name
