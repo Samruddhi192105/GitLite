@@ -105,144 +105,148 @@ public final class GitLiteIntegrationTest {
     }
 
     private static void runRemoteSyncIntegration() throws Exception {
-            Path cloneA = Files.createTempDirectory("gitlite-clone-a-");
-            Path cloneB = Files.createTempDirectory("gitlite-clone-b-");
-            deleteTree(cloneA);
-            deleteTree(cloneB);
-            AtomicReference<byte[]> remoteBundle = new AtomicReference<>(encodeBundle(repository));
-            AtomicReference<String> remoteHead = new AtomicReference<>(
-                    Files.readString(repository.resolve(".gitlite/branches/main.txt")).trim());
-            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-            server.createContext("/api/remotes/0123456789abcdef01234567", exchange -> {
-                try {
-                    if (!"Bearer glp_integration_token_012345678901234567890".equals(
-                            exchange.getRequestHeaders().getFirst("Authorization"))) {
-                        exchange.sendResponseHeaders(401, -1);
+        Path cloneA = Files.createTempDirectory("gitlite-clone-a-");
+        Path cloneB = Files.createTempDirectory("gitlite-clone-b-");
+        Path remoteSource = Files.createTempDirectory("gitlite-empty-remote-");
+        deleteTree(cloneA);
+        deleteTree(cloneB);
+        runAt(remoteSource, 0, Map.of(), "init");
+        AtomicReference<byte[]> remoteBundle = new AtomicReference<>(encodeBundle(remoteSource));
+        AtomicReference<String> remoteHead = new AtomicReference<>("");
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/remotes/0123456789abcdef01234567", exchange -> {
+            try {
+                if (!"Bearer glp_integration_token_012345678901234567890".equals(
+                        exchange.getRequestHeaders().getFirst("Authorization"))) {
+                    exchange.sendResponseHeaders(401, -1);
+                    return;
+                }
+                if (exchange.getRequestMethod().equals("GET")) {
+                    exchange.getResponseHeaders().add("X-GitLite-Head",
+                            remoteHead.get().isBlank() ? "empty" : remoteHead.get());
+                    byte[] body = remoteBundle.get();
+                    exchange.sendResponseHeaders(200, body.length);
+                    exchange.getResponseBody().write(body);
+                } else if (exchange.getRequestMethod().equals("PUT")) {
+                    String expectedHead = remoteHead.get().isBlank() ? "empty" : remoteHead.get();
+                    if (!expectedHead.equals(exchange.getRequestHeaders()
+                            .getFirst("X-GitLite-Expected-Head"))) {
+                        exchange.sendResponseHeaders(409, -1);
                         return;
                     }
-                    if (exchange.getRequestMethod().equals("GET")) {
-                        exchange.getResponseHeaders().add("X-GitLite-Head", remoteHead.get());
-                        byte[] body = remoteBundle.get();
-                        exchange.sendResponseHeaders(200, body.length);
-                        exchange.getResponseBody().write(body);
-                    } else if (exchange.getRequestMethod().equals("PUT")) {
-                        if (!remoteHead.get().equals(exchange.getRequestHeaders()
-                                .getFirst("X-GitLite-Expected-Head"))) {
-                            exchange.sendResponseHeaders(409, -1);
-                            return;
-                        }
-                        byte[] body = exchange.getRequestBody().readAllBytes();
-                        remoteBundle.set(body);
-                        remoteHead.set(bundleHead(body, "main"));
-                        byte[] response = "{\"success\":true}".getBytes(StandardCharsets.UTF_8);
-                        exchange.sendResponseHeaders(200, response.length);
-                        exchange.getResponseBody().write(response);
-                    } else {
-                        exchange.sendResponseHeaders(405, -1);
-                    }
-                } finally {
-                    exchange.close();
+                    byte[] body = exchange.getRequestBody().readAllBytes();
+                    remoteBundle.set(body);
+                    remoteHead.set(bundleHead(body, "main"));
+                    byte[] response = "{\"success\":true}".getBytes(StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(200, response.length);
+                    exchange.getResponseBody().write(response);
+                } else {
+                    exchange.sendResponseHeaders(405, -1);
                 }
-            });
-            server.start();
-            String url = "http://127.0.0.1:" + server.getAddress().getPort()
-                    + "/api/remotes/0123456789abcdef01234567";
-            Map<String, String> environment = Map.of(
-                    "GITLITE_TOKEN", "glp_integration_token_012345678901234567890");
-            try {
-                runAt(repository, 0, environment, "clone", url, cloneA.toString());
-                runAt(repository, 0, environment, "clone", url, cloneB.toString());
-
-                writeWorkingFile(cloneA, "working/from-a.txt", "created on laptop A");
-                runAt(cloneA, 0, environment, "add", "working/from-a.txt");
-                commitAt(cloneA, "laptop A change");
-                runAt(cloneA, 0, environment, "push");
-
-                runAt(cloneB, 0, environment, "pull");
-                assertWorkingFile(cloneB, "working/from-a.txt", "created on laptop A");
-                writeWorkingFile(cloneB, "working/from-b.txt", "created on laptop B");
-                runAt(cloneB, 0, environment, "add", "working/from-b.txt");
-                commitAt(cloneB, "laptop B change");
-                runAt(cloneB, 0, environment, "push");
-
-                runAt(cloneA, 0, environment, "pull");
-                assertWorkingFile(cloneA, "working/from-b.txt", "created on laptop B");
-                runAt(cloneA, 1, Map.of("GITLITE_TOKEN", "glp_invalid_123456789012345678901234567890"),
-                        "pull");
             } finally {
-                server.stop(0);
-                deleteTree(cloneA);
-                deleteTree(cloneB);
+                exchange.close();
             }
+        });
+        server.start();
+        String url = "http://127.0.0.1:" + server.getAddress().getPort()
+                + "/api/remotes/0123456789abcdef01234567";
+        Map<String, String> environment = Map.of(
+                "GITLITE_TOKEN", "glp_integration_token_012345678901234567890");
+        try {
+            runAt(repository, 0, environment, "clone", url, cloneA.toString());
+            runAt(repository, 0, environment, "clone", url, cloneB.toString());
+
+            writeWorkingFile(cloneA, "working/from-a.txt", "created on laptop A");
+            runAt(cloneA, 0, environment, "add", "working/from-a.txt");
+            commitAt(cloneA, "laptop A change");
+            runAt(cloneA, 0, environment, "push");
+
+            runAt(cloneB, 0, environment, "pull");
+            assertWorkingFile(cloneB, "working/from-a.txt", "created on laptop A");
+            writeWorkingFile(cloneB, "working/from-b.txt", "created on laptop B");
+            runAt(cloneB, 0, environment, "add", "working/from-b.txt");
+            commitAt(cloneB, "laptop B change");
+            runAt(cloneB, 0, environment, "push");
+
+            runAt(cloneA, 0, environment, "pull");
+            assertWorkingFile(cloneA, "working/from-b.txt", "created on laptop B");
+            runAt(cloneA, 1, Map.of("GITLITE_TOKEN", "glp_invalid_123456789012345678901234567890"),
+                    "pull");
+        } finally {
+            server.stop(0);
+            deleteTree(cloneA);
+            deleteTree(cloneB);
+            deleteTree(remoteSource);
         }
+    }
 
     private static void commitAt(Path root, String message) throws Exception {
-            String output = runAt(root, 0, Map.of("GITLITE_TOKEN", "glp_integration_token_012345678901234567890"),
-                    "commit", message, "--author-name", "Integration Tester",
-                    "--author-email", "tester@example.test");
-            if (!COMMIT_ID.matcher(output).find()) {
-                throw new AssertionError("commit output did not contain a SHA-256 hash");
-            }
+        String output = runAt(root, 0, Map.of("GITLITE_TOKEN", "glp_integration_token_012345678901234567890"),
+                "commit", message, "--author-name", "Integration Tester",
+                "--author-email", "tester@example.test");
+        if (!COMMIT_ID.matcher(output).find()) {
+            throw new AssertionError("commit output did not contain a SHA-256 hash");
         }
+    }
 
     private static void writeWorkingFile(Path root, String relativePath, String contents) throws IOException {
-            Path target = root.resolve(relativePath);
-            Files.createDirectories(target.getParent());
-            Files.writeString(target, contents, StandardCharsets.UTF_8);
-        }
+        Path target = root.resolve(relativePath);
+        Files.createDirectories(target.getParent());
+        Files.writeString(target, contents, StandardCharsets.UTF_8);
+    }
 
     private static void assertWorkingFile(Path root, String relativePath, String expected) throws IOException {
-            String actual = Files.readString(root.resolve(relativePath));
-            if (!expected.equals(actual)) {
-                throw new AssertionError("unexpected working file contents for " + relativePath);
-            }
+        String actual = Files.readString(root.resolve(relativePath));
+        if (!expected.equals(actual)) {
+            throw new AssertionError("unexpected working file contents for " + relativePath);
         }
+    }
 
     private static byte[] encodeBundle(Path root) throws IOException {
-            Map<String, byte[]> files = new HashMap<>();
-            for (String directory : new String[]{".gitlite", "working"}) {
-                Path base = root.resolve(directory);
-                if (!Files.isDirectory(base)) continue;
-                try (var paths = Files.walk(base)) {
-                    for (Path file : paths.filter(Files::isRegularFile).toList()) {
-                        String name = root.relativize(file).toString().replace('\\', '/');
-                        if (name.equals(".gitlite/remote-url")) continue;
-                        files.put(name, Files.readAllBytes(file));
-                    }
+        Map<String, byte[]> files = new HashMap<>();
+        for (String directory : new String[]{".gitlite", "working"}) {
+            Path base = root.resolve(directory);
+            if (!Files.isDirectory(base)) continue;
+            try (var paths = Files.walk(base)) {
+                for (Path file : paths.filter(Files::isRegularFile).toList()) {
+                    String name = root.relativize(file).toString().replace('\\', '/');
+                    if (name.equals(".gitlite/remote-url")) continue;
+                    files.put(name, Files.readAllBytes(file));
                 }
             }
-
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            try (DataOutputStream output = new DataOutputStream(bytes)) {
-                output.write(new byte[]{'G', 'L', 'B', '1'});
-                output.writeInt(files.size());
-                for (Map.Entry<String, byte[]> entry : files.entrySet().stream()
-                        .sorted(Map.Entry.comparingByKey()).toList()) {
-                    byte[] name = entry.getKey().getBytes(StandardCharsets.UTF_8);
-                    output.writeShort(name.length);
-                    output.write(name);
-                    output.writeLong(entry.getValue().length);
-                    output.write(entry.getValue());
-                }
-            }
-            return bytes.toByteArray();
         }
+
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream output = new DataOutputStream(bytes)) {
+            output.write(new byte[]{'G', 'L', 'B', '1'});
+            output.writeInt(files.size());
+            for (Map.Entry<String, byte[]> entry : files.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey()).toList()) {
+                byte[] name = entry.getKey().getBytes(StandardCharsets.UTF_8);
+                output.writeShort(name.length);
+                output.write(name);
+                output.writeLong(entry.getValue().length);
+                output.write(entry.getValue());
+            }
+        }
+        return bytes.toByteArray();
+    }
 
     private static String bundleHead(byte[] bundle, String branch) throws IOException {
-            try (var input = new java.io.DataInputStream(new java.io.ByteArrayInputStream(bundle))) {
-                input.skipNBytes(4);
-                int count = input.readInt();
-                String expected = ".gitlite/branches/" + branch + ".txt";
-                for (int index = 0; index < count; index++) {
-                    int pathLength = input.readUnsignedShort();
-                    String path = new String(input.readNBytes(pathLength), StandardCharsets.UTF_8);
-                    long contentLength = input.readLong();
-                    byte[] contents = input.readNBytes(Math.toIntExact(contentLength));
-                    if (path.equals(expected)) return new String(contents, StandardCharsets.UTF_8).trim();
-                }
+        try (var input = new java.io.DataInputStream(new java.io.ByteArrayInputStream(bundle))) {
+            input.skipNBytes(4);
+            int count = input.readInt();
+            String expected = ".gitlite/branches/" + branch + ".txt";
+            for (int index = 0; index < count; index++) {
+                int pathLength = input.readUnsignedShort();
+                String path = new String(input.readNBytes(pathLength), StandardCharsets.UTF_8);
+                long contentLength = input.readLong();
+                byte[] contents = input.readNBytes(Math.toIntExact(contentLength));
+                if (path.equals(expected)) return new String(contents, StandardCharsets.UTF_8).trim();
             }
-            throw new AssertionError("test remote bundle has no branch head");
         }
+        throw new AssertionError("test remote bundle has no branch head");
+    }
     private static String commitStagedFiles(String message) throws Exception {
         String output = run(0, "commit", message, "--author-name", "Integration Tester",
                 "--author-email", "tester@example.test");

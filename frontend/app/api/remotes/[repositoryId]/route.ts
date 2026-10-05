@@ -88,7 +88,8 @@ export async function PUT(request: NextRequest, { params }: { params: { reposito
     const files = parseRepositoryBundle(payload);
     const uploadedHead = getBundleHead(files, branch);
     const currentHead = await readCurrentBranchHead(context.root, branch);
-    const expectedHead = request.headers.get("x-gitlite-expected-head") || "";
+    const expectedHeadHeader = request.headers.get("x-gitlite-expected-head") || "";
+    const expectedHead = expectedHeadHeader === "empty" ? "" : expectedHeadHeader;
     if (expectedHead !== currentHead) {
       return NextResponse.json({ error: "Remote branch changed since your last sync. Pull and retry." }, { status: 409 });
     }

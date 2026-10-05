@@ -13,16 +13,20 @@ and snapshots are stored on the filesystem.
 - Separate filesystem roots for each account's repositories. API access checks
   repository ownership before reading or changing repository contents.
 - Java CLI operations for initialization, status, staging files under `working/`,
-  commits, branches, branch switching, and commit checkout.
+  commits, file removal/move, branches, branch switching, and commit checkout.
+- Browser workspace file editing, renaming, and deletion, with changes reflected
+  in the repository working tree.
+- Private GitLite remotes for CLI clone, push, and pull, authenticated with
+  per-repository access tokens.
 - Nested staged files and same-named files in different directories are kept
   distinct in snapshots.
 - Checkout refuses to overwrite staged, modified, or untracked working files.
 - Java integration tests run in temporary directories, and CI checks Java tests,
   TypeScript, and the production frontend build.
 
-The workspace is deliberately limited to implemented operations; it does not
-claim to provide hosted remotes, pull requests, issue tracking, CI workflows,
-or AI features.
+GitLite remotes currently support clean-tree, fast-forward-only synchronization
+with a 20 MB repository bundle limit. Merge support, pull requests, issue
+tracking, CI workflows, and AI features are not implemented.
 
 ---
 
@@ -72,7 +76,35 @@ Use the included `gitlite.bat` wrapper from the root directory:
 
 # Checkout a previous commit
 .\gitlite.bat checkout <commit-id>
+
+# Remove or move a working file (these operations stage the change)
+.\gitlite.bat remove working/notes.txt
+.\gitlite.bat move working/old-name.txt working/new-name.txt
 ```
+
+### Connect the CLI to a web repository
+
+Open the repository in the web app and select **CLI Sync**. Generate a token
+there; it is shown once, and generating a replacement invalidates the previous
+token. Keep the token private. In PowerShell, set it for the current session and
+use the remote URL shown in the setup dialog:
+
+```powershell
+$env:GITLITE_CLI = 'D:\path\to\GitLite\gitlite.bat'
+$env:GITLITE_TOKEN = '<repository-token>'
+& $env:GITLITE_CLI clone '<GitLite remote URL>' "$HOME\my-repository"
+Set-Location "$HOME\my-repository"
+& $env:GITLITE_CLI pull
+
+# After editing, staging, and committing:
+& $env:GITLITE_CLI push
+```
+
+The token is read from `GITLITE_TOKEN` and is not saved in the remote URL or
+repository configuration. Keep the environment variable set for each CLI
+session that uses `clone`, `pull`, or `push`. Synchronization currently requires
+a clean working tree and supports fast-forward updates only; resolve divergent
+histories separately before pushing. Each transfer is limited to 20 MB.
 
 ---
 
