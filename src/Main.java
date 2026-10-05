@@ -9,6 +9,7 @@ import commands.BranchCommand;
 import commands.BranchesCommand;
 import services.MoveService;
 import services.RemoveService;
+import services.RemoteSyncService;
 
 public class Main {
 
@@ -141,6 +142,21 @@ public class Main {
                     throw new IllegalArgumentException("Usage: move working/<old-path> working/<new-path>");
                 }
                 new MoveService().move(args[1], args[2]);
+                break;
+
+            case "clone":
+                if (args.length < 3) {
+                    throw new IllegalArgumentException("Usage: clone <GitLite-remote-URL> <directory>");
+                }
+                new RemoteSyncService().cloneRepository(args[1], args[2]);
+                break;
+
+            case "push":
+                new RemoteSyncService().push();
+                break;
+
+            case "pull":
+                new RemoteSyncService().pull();
                 break;
 
             default:

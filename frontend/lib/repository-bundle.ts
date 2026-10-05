@@ -56,7 +56,7 @@ export async function readRepositoryBundle(root: string): Promise<Buffer> {
   const pieces: Buffer[] = [MAGIC, Buffer.alloc(4)];
   pieces[1].writeUInt32BE(files.size);
   let totalBytes = 8;
-  for (const [relativePath, contents] of files) {
+  for (const [relativePath, contents] of Array.from(files.entries())) {
     const pathBytes = Buffer.from(relativePath, "utf8");
     if (pathBytes.length > 4096) throw new Error("Repository path is too long.");
     const entryHeader = Buffer.alloc(2 + pathBytes.length + 8);
@@ -115,7 +115,7 @@ export async function installRepositoryBundle(root: string, files: RepositoryBun
   const backupRoot = `${root}.backup-${Date.now()}`;
   let movedOriginal = false;
   try {
-    for (const [relativePath, contents] of files) {
+    for (const [relativePath, contents] of Array.from(files.entries())) {
       const safePath = validateBundlePath(relativePath);
       const destination = path.resolve(temporaryRoot, ...safePath.split("/"));
       if (!destination.startsWith(`${temporaryRoot}${path.sep}`)) {
@@ -155,6 +155,40 @@ export function getBundleHead(files: RepositoryBundle, branch: string): string {
     throw new Error("Branch points to an invalid commit.");
   }
   return branchHead;
+}
+
+export function assertBundleWorkingTreeClean(files: RepositoryBundle): void {
+  for (const relativePath of Array.from(files.keys())) {
+    if (relativePath.startsWith(".gitlite/staging/")) {
+      throw new Error("Commit or unstage changes before syncing.");
+    }
+  }
+  const branch = files.get(".gitlite/HEAD")?.toString("utf8").trim() || "";
+  const head = getBundleHead(files, branch);
+  const snapshotPrefix = head ? `.gitlite/commits/${head}/snapshot/working/` : "";
+  const snapshot = new Map<string, Buffer>();
+  if (head) {
+    for (const [filePath, contents] of Array.from(files.entries())) {
+      if (filePath.startsWith(snapshotPrefix)) {
+        snapshot.set(filePath.slice(snapshotPrefix.length), contents);
+      }
+    }
+  }
+  const working = new Map<string, Buffer>();
+  for (const [filePath, contents] of Array.from(files.entries())) {
+    if (filePath.startsWith("working/")) {
+      working.set(filePath.slice("working/".length), contents);
+    }
+  }
+  if (
+    working.size !== snapshot.size ||
+    Array.from(working.entries()).some(([filePath, contents]) => {
+      const committed = snapshot.get(filePath);
+      return !committed || !contents.equals(committed);
+    })
+  ) {
+    throw new Error("Commit or remove untracked/modified files before syncing.");
+  }
 }
 
 export function isFastForward(files: RepositoryBundle, ancestor: string, descendant: string): boolean {

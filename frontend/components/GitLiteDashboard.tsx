@@ -12,6 +12,7 @@ import InteractiveTerminal from "@/components/InteractiveTerminal";
 import StageCommitModal from "@/components/StageCommitModal";
 import CommitsTimeline from "@/components/CommitsTimeline";
 import Footer from "@/components/Footer";
+import RemoteSetupModal from "@/components/RemoteSetupModal";
 import { GitStatus, GitCommit, RepoItem, FileDetails } from "@/lib/gitlite";
 
 export default function GitLiteDashboard({
@@ -27,6 +28,7 @@ export default function GitLiteDashboard({
   const [activeTab, setActiveTab] = useState<ActiveTab>("code");
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [stageModalOpen, setStageModalOpen] = useState(false);
+  const [remoteSetupOpen, setRemoteSetupOpen] = useState(false);
 
   // GitLite Data
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -240,6 +242,7 @@ export default function GitLiteDashboard({
         onToggleTheme={toggleTheme}
         userName={userName}
         repositoryName={repositoryName}
+        onOpenRemoteSetup={() => setRemoteSetupOpen(true)}
       />
 
       {/* GitHub Repository Header */}
@@ -384,6 +387,14 @@ export default function GitLiteDashboard({
           status={status}
           onClose={() => setStageModalOpen(false)}
           onRefresh={refreshAll}
+        />
+      )}
+
+      {remoteSetupOpen && (
+        <RemoteSetupModal
+          repositoryId={repositoryId}
+          repositorySlug={repositoryName.toLowerCase().replace(/[^a-z0-9._-]+/g, "-")}
+          onClose={() => setRemoteSetupOpen(false)}
         />
       )}
 

@@ -7,6 +7,7 @@ import { GitLiteLogo } from "./icons/GitLiteLogo";
 import {
   LogOut,
   Terminal,
+  Cable,
   Moon,
   Sun,
 } from "lucide-react";
@@ -18,6 +19,7 @@ interface HeaderProps {
   onToggleTheme: () => void;
   userName: string;
   repositoryName: string;
+  onOpenRemoteSetup?: () => void;
 }
 
 export default function Header({
@@ -27,6 +29,7 @@ export default function Header({
   onToggleTheme,
   userName,
   repositoryName,
+  onOpenRemoteSetup,
 }: HeaderProps) {
   const router = useRouter();
   const [signOutError, setSignOutError] = React.useState("");
@@ -84,6 +87,15 @@ export default function Header({
 
         {/* Right Side Tools & User Profile */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={onOpenRemoteSetup}
+            className="flex items-center gap-1.5 rounded-lg border border-[#1e293b] bg-[#0f1524] px-3 py-1.5 text-xs font-medium text-[#f8fafc] transition hover:border-emerald-400/40 hover:text-emerald-300"
+            title="Connect a local GitLite CLI"
+          >
+            <Cable className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">CLI Sync</span>
+          </button>
+
           {/* GitLite CLI Terminal Quick Toggle */}
           <button
             onClick={onToggleTerminal}

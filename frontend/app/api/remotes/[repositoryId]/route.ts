@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import { getRepositoryStoragePath, getRepositoryById } from "@/lib/repositories";
 import {
   getBundleHead,
+  assertBundleWorkingTreeClean,
   installRepositoryBundle,
   isFastForward,
   MAX_REPOSITORY_BUNDLE_BYTES,
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest, { params }: { params: { reposito
     const branch = requestedBranch(request);
     const bundle = await readRepositoryBundle(context.root);
     const head = await readCurrentBranchHead(context.root, branch);
-    return new NextResponse(bundle, {
+    return new NextResponse(new Uint8Array(bundle), {
       headers: {
         "Content-Type": "application/vnd.gitlite.bundle",
         "Content-Length": String(bundle.length),
@@ -90,6 +91,13 @@ export async function PUT(request: NextRequest, { params }: { params: { reposito
     const expectedHead = request.headers.get("x-gitlite-expected-head") || "";
     if (expectedHead !== currentHead) {
       return NextResponse.json({ error: "Remote branch changed since your last sync. Pull and retry." }, { status: 409 });
+    }
+    const currentBundle = parseRepositoryBundle(await readRepositoryBundle(context.root));
+    try {
+      assertBundleWorkingTreeClean(currentBundle);
+      assertBundleWorkingTreeClean(files);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Working tree is not clean." }, { status: 409 });
     }
     if (!isFastForward(files, currentHead, uploadedHead)) {
       return NextResponse.json({ error: "Push rejected: this is not a fast-forward update." }, { status: 409 });
