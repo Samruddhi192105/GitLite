@@ -19,7 +19,6 @@ export default async function RepositoryDashboardPage({
   if (!repository) {
     notFound();
   }
-
   return (
     <GitLiteDashboard
       userName={session.name}

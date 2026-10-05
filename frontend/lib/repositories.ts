@@ -11,9 +11,6 @@ export interface RepositoryDocument {
   slug: string;
   createdAt: Date;
   updatedAt: Date;
-  remoteTokenHash?: string;
-  remoteTokenPrefix?: string;
-  remoteTokenCreatedAt?: Date;
 }
 
 export interface RepositorySummary {
@@ -87,25 +84,13 @@ export async function getOwnedRepository(
   return repositories.findOne({ _id: new ObjectId(repositoryId), ownerId });
 }
 
-export async function getRepositoryById(repositoryId: string): Promise<RepositoryDocument | null> {
-  if (!ObjectId.isValid(repositoryId)) return null;
+export async function updateOwnedRepositoryTimestamp(ownerId: string, repositoryId: string): Promise<void> {
+  if (!ObjectId.isValid(repositoryId)) return;
   const repositories = await getRepositoriesCollection();
-  return repositories.findOne({ _id: new ObjectId(repositoryId) });
-}
-
-export async function setRepositoryRemoteToken(
-  ownerId: string,
-  repositoryId: string,
-  tokenHash: string,
-  tokenPrefix: string
-): Promise<boolean> {
-  if (!ObjectId.isValid(repositoryId)) return false;
-  const repositories = await getRepositoriesCollection();
-  const result = await repositories.updateOne(
+  await repositories.updateOne(
     { _id: new ObjectId(repositoryId), ownerId },
-    { $set: { remoteTokenHash: tokenHash, remoteTokenPrefix: tokenPrefix, remoteTokenCreatedAt: new Date() } }
+    { $set: { updatedAt: new Date() } }
   );
-  return result.matchedCount === 1;
 }
 
 export async function createOwnedRepository(

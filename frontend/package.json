@@ -11,6 +11,7 @@
     "prestart": "npm run build:java",
     "start": "next start",
     "test:java": "node scripts/test-java.mjs",
+    "test:sync": "node scripts/test-browser-folder-sync.mjs",
     "lint": "next lint"
   },
   "dependencies": {

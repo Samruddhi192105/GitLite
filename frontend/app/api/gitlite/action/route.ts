@@ -5,6 +5,8 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { getAuthSession } from "@/lib/auth";
 import { authorizeRepository } from "@/lib/repository-access";
+import { RepositorySyncConflict } from "@/lib/repository-sync-error";
+import { acquireRepositorySyncLocks } from "@/lib/repository-sync-lock";
 
 async function commandResponse(
   args: string[],
@@ -53,6 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
+  let releaseLock: (() => Promise<void>) | undefined;
   try {
     const body = await request.json();
     if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -71,6 +74,8 @@ export async function POST(request: NextRequest) {
     if (typeof action !== "string" || !action) {
       return NextResponse.json({ error: "Action is required." }, { status: 400 });
     }
+
+    releaseLock = await acquireRepositorySyncLocks(session.userId, [body.repoId]);
 
     if (action === "init") {
       return commandResponse(["init"], context.root, session);
@@ -260,7 +265,9 @@ export async function POST(request: NextRequest) {
     console.error("GitLite action failed:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Action failed." },
-      { status: 500 }
+      { status: error instanceof RepositorySyncConflict ? 409 : 500 }
     );
+  } finally {
+    if (releaseLock) await releaseLock();
   }
 }

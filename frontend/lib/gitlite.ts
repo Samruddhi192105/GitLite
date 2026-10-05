@@ -60,6 +60,7 @@ export interface FileDetails {
   lineCount: number;
   content: string;
   lines: string[];
+  isBinary: boolean;
   lastModified?: string;
 }
 
@@ -408,9 +409,20 @@ export function getFileDetails(
     return null;
   }
 
-  const content = fs.readFileSync(fullPath, "utf-8");
+  const bytes = fs.readFileSync(fullPath);
+  let content = "";
+  let isBinary = bytes.includes(0) || bytes.some((byte) =>
+    (byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0d) || byte === 0x7f
+  );
+  if (!isBinary) {
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      isBinary = true;
+    }
+  }
   const stat = fs.statSync(fullPath);
-  const lines = content.split("\n");
+  const lines = isBinary ? [] : content.split("\n");
 
   return {
     name: path.basename(fullPath),
@@ -419,6 +431,7 @@ export function getFileDetails(
     lineCount: lines.length,
     content,
     lines,
+    isBinary,
     lastModified: stat.mtime.toISOString(),
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Header from "@/components/Header";
 import RepoHeader, { ActiveTab } from "@/components/RepoHeader";
 import BranchSelector from "@/components/BranchSelector";
@@ -12,8 +12,15 @@ import InteractiveTerminal from "@/components/InteractiveTerminal";
 import StageCommitModal from "@/components/StageCommitModal";
 import CommitsTimeline from "@/components/CommitsTimeline";
 import Footer from "@/components/Footer";
-import RemoteSetupModal from "@/components/RemoteSetupModal";
 import { GitStatus, GitCommit, RepoItem, FileDetails } from "@/lib/gitlite";
+import { FilePlus2, FolderUp } from "lucide-react";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_FILES, MAX_UPLOAD_SIZE_LABEL } from "@/lib/upload-limits";
+import {
+  cloneRepositoryToFolder,
+  pullRepositoryToFolder,
+  pushFolderToRepository,
+  supportsBrowserFolderSync,
+} from "@/lib/browser-folder-sync";
 
 export default function GitLiteDashboard({
   userName,
@@ -25,10 +32,15 @@ export default function GitLiteDashboard({
   repositoryName: string;
 }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [folderSyncSupported, setFolderSyncSupported] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("code");
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [stageModalOpen, setStageModalOpen] = useState(false);
-  const [remoteSetupOpen, setRemoteSetupOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const [syncing, setSyncing] = useState<"clone" | "push" | "pull" | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   // GitLite Data
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -40,6 +52,12 @@ export default function GitLiteDashboard({
   const [snapshotCommitId, setSnapshotCommitId] = useState<string | undefined>(undefined);
   const [viewingCommitsHistory, setViewingCommitsHistory] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [syncMessage, setSyncMessage] = useState("");
+
+  useEffect(() => {
+    folderInputRef.current?.setAttribute("webkitdirectory", "");
+    setFolderSyncSupported(supportsBrowserFolderSync());
+  }, []);
 
   // Theme toggle
   const toggleTheme = () => {
@@ -124,6 +142,90 @@ export default function GitLiteDashboard({
       setActionError(error instanceof Error ? error.message : "Repository action failed.");
     }
   }, [refreshAll, repositoryId]);
+
+  const uploadFiles = async (event: React.ChangeEvent<HTMLInputElement>, preservePaths: boolean) => {
+    const input = event.currentTarget;
+    const selectedFiles = Array.from(input.files || []);
+    input.value = "";
+    if (selectedFiles.length === 0) return;
+    const batches: File[][] = [];
+    let currentBatch: File[] = [];
+    let currentBatchBytes = 0;
+    for (const file of selectedFiles) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setActionError(`${file.name} is larger than the ${MAX_UPLOAD_SIZE_LABEL} per-file upload limit.`);
+        return;
+      }
+      if (
+        currentBatch.length > 0 &&
+        (currentBatch.length >= MAX_UPLOAD_FILES || currentBatchBytes + file.size > MAX_UPLOAD_BYTES)
+      ) {
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentBatchBytes = 0;
+      }
+      currentBatch.push(file);
+      currentBatchBytes += file.size;
+    }
+    if (currentBatch.length > 0) batches.push(currentBatch);
+
+    let completedBatches = 0;
+    setUploading(true);
+    setActionError("");
+    try {
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        setUploadProgress(
+          batches.length > 1 ? `Uploading batch ${batchIndex + 1} of ${batches.length}...` : "Uploading files..."
+        );
+        const paths = batch.map((file) =>
+          preservePaths && file.webkitRelativePath ? file.webkitRelativePath : file.name
+        );
+        const form = new FormData();
+        form.set("repoId", repositoryId);
+        form.set("paths", JSON.stringify(paths));
+        batch.forEach((file) => form.append("files", file, file.name));
+
+        const response = await fetch("/api/gitlite/upload", { method: "POST", body: form });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || `Upload batch ${batchIndex + 1} failed.`);
+        }
+        completedBatches++;
+      }
+
+      await refreshAll();
+    } catch (error) {
+      if (completedBatches > 0) await refreshAll();
+      const message = error instanceof Error ? error.message : "Could not upload project files.";
+      const partialMessage = completedBatches > 0
+        ? ` Uploaded ${completedBatches} of ${batches.length} batches; those files are already in the repository.`
+        : "";
+      setActionError(`${message}${partialMessage}`);
+    } finally {
+      setUploadProgress("");
+      setUploading(false);
+    }
+  };
+
+  const syncLocalFolder = async (action: "clone" | "push" | "pull") => {
+    setSyncing(action);
+    setActionError("");
+    setSyncMessage("");
+    try {
+      const message = action === "clone"
+        ? await cloneRepositoryToFolder(repositoryId)
+        : action === "push"
+          ? await pushFolderToRepository(repositoryId)
+          : await pullRepositoryToFolder(repositoryId);
+      if (action !== "clone") await refreshAll();
+      setSyncMessage(message);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : `Could not ${action} the selected folder.`);
+    } finally {
+      setSyncing(null);
+    }
+  };
 
   useEffect(() => {
     Promise.all([loadStatus(), loadCommits(), loadFiles()]);
@@ -242,7 +344,6 @@ export default function GitLiteDashboard({
         onToggleTheme={toggleTheme}
         userName={userName}
         repositoryName={repositoryName}
-        onOpenRemoteSetup={() => setRemoteSetupOpen(true)}
       />
 
       {/* GitHub Repository Header */}
@@ -266,6 +367,11 @@ export default function GitLiteDashboard({
             <button onClick={() => setActionError("")} className="shrink-0 text-rose-200 hover:text-white" aria-label="Dismiss error">
               Dismiss
             </button>
+          </div>
+        )}
+        {syncMessage && (
+          <div role="status" className="mb-5 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-4 py-3 text-sm text-emerald-200">
+            {syncMessage}
           </div>
         )}
         {/* TAB 1: CODE */}
@@ -302,6 +408,68 @@ export default function GitLiteDashboard({
                     />
 
                     <div className="flex items-center gap-2">
+                      {viewMode === "project" && (
+                        <>
+                          <button
+                            onClick={() => void syncLocalFolder("clone")}
+                            disabled={syncing !== null}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-1.5 text-xs font-semibold text-[#c9d1d9] transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:opacity-50"
+                            title="Download this repository into a folder you select on this computer"
+                          >
+                            {syncing === "clone" ? "Cloning..." : "Clone to folder"}
+                          </button>
+                          <button
+                            onClick={() => void syncLocalFolder("pull")}
+                            disabled={syncing !== null}
+                            className="rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-1.5 text-xs font-semibold text-[#c9d1d9] transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:opacity-50"
+                            title="Pull hosted repository changes into the selected local folder"
+                          >
+                            {syncing === "pull" ? "Pulling..." : "Pull"}
+                          </button>
+                          <button
+                            onClick={() => void syncLocalFolder("push")}
+                            disabled={syncing !== null}
+                            className="rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-1.5 text-xs font-semibold text-[#c9d1d9] transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:opacity-50"
+                            title="Push local folder changes to the hosted repository"
+                          >
+                            {syncing === "push" ? "Pushing..." : "Push"}
+                          </button>
+                          <input
+                            ref={folderInputRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(event) => void uploadFiles(event, true)}
+                            aria-label="Choose a project folder to upload"
+                          />
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(event) => void uploadFiles(event, false)}
+                            aria-label="Choose files to upload"
+                          />
+                          <button
+                            onClick={() => folderInputRef.current?.click()}
+                            disabled={uploading}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-1.5 text-xs font-semibold text-[#c9d1d9] transition hover:border-emerald-400/40 hover:text-emerald-300 disabled:opacity-50"
+                            title={`Add a folder from this device to the repository (${MAX_UPLOAD_SIZE_LABEL} maximum)`}
+                          >
+                            <FolderUp className="h-3.5 w-3.5" />
+                            {uploading ? uploadProgress || "Uploading..." : "Add folder"}
+                          </button>
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-1.5 text-xs font-semibold text-[#c9d1d9] transition hover:border-emerald-400/40 hover:text-emerald-300 disabled:opacity-50"
+                            title={`Upload individual files into working/ (${MAX_UPLOAD_SIZE_LABEL} maximum)`}
+                          >
+                            <FilePlus2 className="h-3.5 w-3.5" />
+                            {uploading ? uploadProgress || "Uploading..." : "Add files"}
+                          </button>
+                        </>
+                      )}
                       <button
                         onClick={() => setStageModalOpen(true)}
                         className="rounded-lg bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-400"
@@ -310,6 +478,11 @@ export default function GitLiteDashboard({
                       </button>
                     </div>
                   </div>
+                  {viewMode === "project" && !folderSyncSupported && (
+                    <p className="mb-3 text-xs text-amber-200/80">
+                      Direct Clone, Push, and Pull need Chrome or Edge on desktop. In other browsers, use Add folder to upload files; download files individually from the repository viewer.
+                    </p>
+                  )}
 
                   {/* If viewing a single file, render FileViewer */}
                   {selectedFile ? (
@@ -318,6 +491,8 @@ export default function GitLiteDashboard({
                       onBack={() => setSelectedFile(null)}
                       repositoryId={repositoryId}
                       canEdit={viewMode === "project" && selectedFile.path.startsWith("working/")}
+                      mode={viewMode}
+                      commitId={snapshotCommitId}
                       onMutation={handleFileMutation}
                     />
                   ) : (
@@ -354,7 +529,7 @@ export default function GitLiteDashboard({
           </>
         )}
 
-        {/* TAB 2: TERMINAL */}
+        {/* TAB 2: BROWSER COMMAND CONSOLE */}
         {activeTab === "terminal" && (
           <div className="my-4">
             <InteractiveTerminal
@@ -387,14 +562,6 @@ export default function GitLiteDashboard({
           status={status}
           onClose={() => setStageModalOpen(false)}
           onRefresh={refreshAll}
-        />
-      )}
-
-      {remoteSetupOpen && (
-        <RemoteSetupModal
-          repositoryId={repositoryId}
-          repositorySlug={repositoryName.toLowerCase().replace(/[^a-z0-9._-]+/g, "-")}
-          onClose={() => setRemoteSetupOpen(false)}
         />
       )}
 

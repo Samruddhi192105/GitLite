@@ -11,15 +11,26 @@ interface FileViewerProps {
     lineCount: number;
     content: string;
     lines: string[];
+    isBinary: boolean;
     lastModified?: string;
   };
   onBack: () => void;
   repositoryId: string;
   canEdit: boolean;
+  mode: "project" | "snapshot";
+  commitId?: string;
   onMutation: (path?: string) => void;
 }
 
-export default function FileViewer({ file, onBack, repositoryId, canEdit, onMutation }: FileViewerProps) {
+export default function FileViewer({
+  file,
+  onBack,
+  repositoryId,
+  canEdit,
+  mode,
+  commitId,
+  onMutation,
+}: FileViewerProps) {
   const [copied, setCopied] = useState(false);
   const [rawView, setRawView] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -56,14 +67,33 @@ export default function FileViewer({ file, onBack, repositoryId, canEdit, onMuta
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([file.content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = file.name;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleDownload = async () => {
+    try {
+      let blob: Blob;
+      if (file.isBinary) {
+        const query = new URLSearchParams({
+          path: file.path,
+          mode,
+          isFile: "true",
+          download: "true",
+          repoId: repositoryId,
+        });
+        if (commitId) query.set("commitId", commitId);
+        const response = await fetch(`/api/gitlite/files?${query.toString()}`);
+        if (!response.ok) throw new Error("Could not download this file.");
+        blob = await response.blob();
+      } else {
+        blob = new Blob([file.content], { type: "text/plain;charset=utf-8" });
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.name;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Could not download this file.");
+    }
   };
 
   // Basic syntax colorizer for Java, TS, JSON, Markdown
@@ -123,7 +153,7 @@ export default function FileViewer({ file, onBack, repositoryId, canEdit, onMuta
 
         {/* File actions */}
         <div className="flex items-center gap-1.5">
-          {canEdit && !isEditing && !renaming && (
+          {canEdit && !file.isBinary && !isEditing && !renaming && (
             <>
               <button
                 onClick={() => setIsEditing(true)}
@@ -152,31 +182,35 @@ export default function FileViewer({ file, onBack, repositoryId, canEdit, onMuta
               </button>
             </>
           )}
-          <button
-            onClick={() => setRawView(!rawView)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] border border-[#30363d] transition-colors"
-          >
-            <Eye className="w-3.5 h-3.5 text-[#7d8590]" />
-            <span>{rawView ? "Preview" : "Raw"}</span>
-          </button>
+          {!file.isBinary && (
+            <>
+              <button
+                onClick={() => setRawView(!rawView)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] border border-[#30363d] transition-colors"
+              >
+                <Eye className="w-3.5 h-3.5 text-[#7d8590]" />
+                <span>{rawView ? "Preview" : "Raw"}</span>
+              </button>
 
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] border border-[#30363d] transition-colors"
-            title="Copy raw file contents"
-          >
-            {copied ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-[#2ea043]" />
-                <span className="text-[#2ea043]">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5 text-[#7d8590]" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] border border-[#30363d] transition-colors"
+                title="Copy raw file contents"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-[#2ea043]" />
+                    <span className="text-[#2ea043]">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-[#7d8590]" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+            </>
+          )}
 
           <button
             onClick={handleDownload}
@@ -212,7 +246,12 @@ export default function FileViewer({ file, onBack, repositoryId, canEdit, onMuta
       )}
 
       {/* Code Viewer Body */}
-      {isEditing ? (
+      {file.isBinary ? (
+        <div className="px-4 py-10 text-center text-sm text-[#94a3b8]">
+          <p>This is a binary file and cannot be previewed or edited in the browser.</p>
+          <p className="mt-1 text-xs text-[#7d8590]">Use Download to save the original file.</p>
+        </div>
+      ) : isEditing ? (
         <div className="space-y-3 p-4">
           <textarea
             aria-label={`Edit ${file.path}`}

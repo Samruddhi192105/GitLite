@@ -160,7 +160,7 @@ export default function InteractiveTerminal({
         <div className="flex items-center gap-2">
           <Terminal className="w-3.5 h-3.5 text-[#3fb950]" />
           <span className="font-semibold text-[#e6edf3]">
-            GitLite CLI · Java 21
+            GitLite Repository Console
           </span>
         </div>
 

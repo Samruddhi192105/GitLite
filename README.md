@@ -12,21 +12,30 @@ and snapshots are stored on the filesystem.
 - Owner-scoped repository list/create/read APIs and repository workspace routes.
 - Separate filesystem roots for each account's repositories. API access checks
   repository ownership before reading or changing repository contents.
-- Java CLI operations for initialization, status, staging files under `working/`,
-  commits, file removal/move, branches, branch switching, and commit checkout.
-- Browser workspace file editing, renaming, and deletion, with changes reflected
-  in the repository working tree.
-- Private GitLite remotes for CLI clone, push, and pull, authenticated with
-  per-repository access tokens.
+- Browser-based project and file uploads, file editing, renaming, and deletion.
+- In-browser staging, commits, branches, branch switching, and commit checkout.
+- Browser folder Clone, Push, and Pull using the File System Access API in
+  desktop Chrome and Edge. The browser transfers files between a folder selected
+  on the user's computer and the hosted GitLite repository; no local Git
+  installation or CLI is required.
 - Nested staged files and same-named files in different directories are kept
   distinct in snapshots.
 - Checkout refuses to overwrite staged, modified, or untracked working files.
 - Java integration tests run in temporary directories, and CI checks Java tests,
   TypeScript, and the production frontend build.
 
-GitLite remotes currently support clean-tree, fast-forward-only synchronization
-with a 20 MB repository bundle limit. Merge support, pull requests, issue
-tracking, CI workflows, and AI features are not implemented.
+GitLite is designed to be used through its website; users do not need to install
+the CLI or GitLite on their computers. Uploads support up to 10,000 files and
+100 MB per batch; larger folders are split into sequential batches automatically.
+Direct folder Clone, Push, and Pull are available in desktop Chrome and Edge,
+require the user to select a folder and grant read/write access, and support up
+to 100,000 files / 2 GB per sync. The selected folder handle and sync baseline
+are saved in that browser's IndexedDB. On another computer, clone the repository
+again into a separate folder; browser sync state is not shared between devices.
+Other browsers can use **Add folder** to upload and download files individually,
+but do not support direct folder Push/Pull. Merge support, cross-account
+repository sharing, pull requests, issue tracking, CI workflows, and AI
+features are not implemented.
 
 ---
 
@@ -51,8 +60,29 @@ replace chunks used by the dev server.
 
 Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
-### 2. Run GitLite from the Command Line
-Use the included `gitlite.bat` wrapper from the root directory:
+### 2. Use GitLite in your browser
+
+Open the deployed URL, sign up, sign in, and create a repository. To import an
+existing project, open the repository and select **Add folder** to choose a
+folder, or **Add files** to choose individual files. The folder structure is
+preserved under `working/`. To get a repository onto your computer, select
+**Clone to folder** and grant access to an empty folder. Chrome/Edge remember
+the folder handle in that browser. On another computer, clone into a new folder;
+browser sync state is not shared between devices.
+
+Use **Stage & Commit** in the workspace to stage the uploaded changes and create
+a commit. You can also edit, rename, or delete files in the browser, then stage
+and commit those changes the same way. After local changes, select **Push** and
+choose the same folder to upload the changes and create a hosted commit. To get
+newer hosted commits, select **Pull** and choose that folder; Pull refuses to
+overwrite local edits, so push them first or clone into a different folder.
+GitLite skips `.git` and `.gitlite` directories in the selected computer folder
+and does not read or modify its local Git metadata. In browsers without direct
+folder access, use **Add folder** to upload and download files individually
+from the repository viewer. The in-browser command console is optional; normal
+repository work can be done with the workspace controls.
+
+For local development of GitLite itself, the optional Java CLI wrapper is:
 
 ```bash
 # Check status
@@ -81,30 +111,6 @@ Use the included `gitlite.bat` wrapper from the root directory:
 .\gitlite.bat remove working/notes.txt
 .\gitlite.bat move working/old-name.txt working/new-name.txt
 ```
-
-### Connect the CLI to a web repository
-
-Open the repository in the web app and select **CLI Sync**. Generate a token
-there; it is shown once, and generating a replacement invalidates the previous
-token. Keep the token private. In PowerShell, set it for the current session and
-use the remote URL shown in the setup dialog:
-
-```powershell
-$env:GITLITE_CLI = 'D:\path\to\GitLite\gitlite.bat'
-$env:GITLITE_TOKEN = '<repository-token>'
-& $env:GITLITE_CLI clone '<GitLite remote URL>' "$HOME\my-repository"
-Set-Location "$HOME\my-repository"
-& $env:GITLITE_CLI pull
-
-# After editing, staging, and committing:
-& $env:GITLITE_CLI push
-```
-
-The token is read from `GITLITE_TOKEN` and is not saved in the remote URL or
-repository configuration. Keep the environment variable set for each CLI
-session that uses `clone`, `pull`, or `push`. Synchronization currently requires
-a clean working tree and supports fast-forward updates only; resolve divergent
-histories separately before pushing. Each transfer is limited to 20 MB.
 
 ---
 

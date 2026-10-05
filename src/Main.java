@@ -9,7 +9,6 @@ import commands.BranchCommand;
 import commands.BranchesCommand;
 import services.MoveService;
 import services.RemoveService;
-import services.RemoteSyncService;
 
 public class Main {
 
@@ -40,6 +39,10 @@ public class Main {
 
                 AddCommand addCommand = new AddCommand();
                 addCommand.execute(args[1]);
+                break;
+
+            case "addall":
+                new services.StageService().addAll();
                 break;
 
             case "commit":
@@ -144,21 +147,6 @@ public class Main {
                 new MoveService().move(args[1], args[2]);
                 break;
 
-            case "clone":
-                if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: clone <GitLite-remote-URL> <directory>");
-                }
-                new RemoteSyncService().cloneRepository(args[1], args[2]);
-                break;
-
-            case "push":
-                new RemoteSyncService().push();
-                break;
-
-            case "pull":
-                new RemoteSyncService().pull();
-                break;
-
             default:
                 throw new IllegalArgumentException("Unknown command: " + command);
             }
@@ -182,6 +170,9 @@ public class Main {
         System.out.println();
         System.out.println("add <filename>");
         System.out.println("    Stage a file");
+        System.out.println();
+        System.out.println("addall");
+        System.out.println("    Stage every regular file under working/");
         System.out.println();
         System.out.println("commit \"message\"");
         System.out.println("    Create a new commit");

@@ -43,7 +43,29 @@ npm run dev
 ```
 
 Open http://localhost:3000, create an account, then sign in. Create a repository
-from the dashboard to open its workspace. The `predev`, `prebuild`, and
+from the dashboard to open its workspace. Use **Add folder** to import a folder
+from the browser, or **Add files** to upload selected files. Directory
+structure is preserved under `working/`; each upload batch supports up to
+10,000 files and 100 MB. Larger folders are split into sequential batches
+automatically. Configure the deployment platform, reverse proxy, and request
+timeout to allow multipart requests slightly larger than 100 MB.
+Then use **Stage & Commit** to save the uploaded files in GitLite history.
+Repository use is browser-based; users do not need a local GitLite installation.
+In desktop Chrome or Edge, **Clone to folder** downloads the hosted repository
+into a folder you select and explicitly authorize. Use **Push** to upload local
+changes and create a hosted commit, or **Pull** to update the folder with hosted
+changes. Push and Pull must use the same selected folder in that browser.
+GitLite stores the folder handle and last-synced file hashes in browser
+IndexedDB; this state is not shared with another browser or computer. To use a
+second computer, select **Clone to folder** there as well. Pull refuses to
+overwrite local changes, and Push refuses if the hosted branch has moved since
+the last sync. Local `.git` and `.gitlite` directories are skipped and never
+read or modified. Direct folder access is not supported in other browsers; use
+**Add folder** to upload and download files individually from the repository
+viewer instead. Direct sync supports up to 100,000 files / 2 GB per operation,
+with uploads/downloads transferred in sequential batches no larger than 10,000
+files / 100 MB each.
+The `predev`, `prebuild`, and
 `prestart` npm scripts compile the Java engine to the ignored
 `.gitlite-classes/` directory automatically. Java 21 and Node 20 or newer are
 required.
