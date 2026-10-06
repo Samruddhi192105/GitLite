@@ -87,18 +87,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Filename is required." }, { status: 400 });
       }
 
-      // Check if file is in working directory or root
-      const requestedPath = path.resolve(context.root, file);
-      const workingPath = path.join(getWorkingDir(context.root), file);
-      const rootPath = path.resolve(context.root);
-      if (requestedPath !== rootPath && !requestedPath.startsWith(`${rootPath}${path.sep}`)) {
-        return NextResponse.json({ error: "File path is outside the repository." }, { status: 400 });
+      const workingPath = resolveWorkingFile(context.root, file);
+      if (!fs.existsSync(workingPath) || !fs.statSync(workingPath).isFile()) {
+        return NextResponse.json({ error: "Working file not found." }, { status: 404 });
       }
-      let targetPath = file;
-      if (fs.existsSync(workingPath)) {
-        targetPath = `working/${file}`;
-      }
-
+      const targetPath = `working/${path.relative(getWorkingDir(context.root), workingPath)}`;
       return commandResponse(["add", targetPath], context.root, session);
     }
 
@@ -172,10 +165,19 @@ export async function POST(request: NextRequest) {
         throw error;
       }
 
+      const relativePath = path.relative(workingDir, resolvedFilePath).split(path.sep).join("/");
+      const stageResult = await runGitLiteCommand(["add", `working/${relativePath}`], context.root);
+      if (!stageResult.success) {
+        return NextResponse.json(
+          { error: `File created in working/ but could not be staged: ${stageResult.stderr}` },
+          { status: 400 }
+        );
+      }
+
       const status = await getGitStatus(context.root);
       return NextResponse.json({
         success: true,
-        stdout: `Created working/${filename} successfully`,
+        stdout: `Created and staged working/${relativePath} successfully`,
         status,
       });
     }

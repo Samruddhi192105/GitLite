@@ -50,6 +50,8 @@ structure is preserved under `working/`; each upload batch supports up to
 automatically. Configure the deployment platform, reverse proxy, and request
 timeout to allow multipart requests slightly larger than 100 MB.
 Then use **Stage & Commit** to save the uploaded files in GitLite history.
+Files created with **New file** are staged immediately for review, but are not
+committed until you choose **Commit changes**.
 Repository use is browser-based; users do not need a local GitLite installation.
 In desktop Chrome or Edge, **Clone to folder** downloads the hosted repository
 into a folder you select and explicitly authorize. Use **Push** to upload local

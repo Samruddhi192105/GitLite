@@ -64,6 +64,75 @@ export interface FileDetails {
   lastModified?: string;
 }
 
+function formatCommitAge(timestamp: string): string {
+  const committedAt = Date.parse(timestamp);
+  if (!Number.isFinite(committedAt)) return "Unknown time";
+
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - committedAt) / 1000));
+  if (elapsedSeconds < 60) return "just now";
+  if (elapsedSeconds < 3600) {
+    const minutes = Math.floor(elapsedSeconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+  if (elapsedSeconds < 86400) {
+    const hours = Math.floor(elapsedSeconds / 3600);
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+  if (elapsedSeconds < 2_592_000) {
+    const days = Math.floor(elapsedSeconds / 86400);
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+  }
+  if (elapsedSeconds < 31_536_000) {
+    const months = Math.floor(elapsedSeconds / 2_592_000);
+    return `${months} month${months === 1 ? "" : "s"} ago`;
+  }
+  const years = Math.floor(elapsedSeconds / 31_536_000);
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+}
+
+function latestCommitForPath(
+  repositoryRoot: string,
+  commitsById: Map<string, GitCommit>,
+  startingCommitId: string,
+  itemPath: string,
+  isDirectory: boolean
+): GitCommit | undefined {
+  const matchesItem = (file: string) =>
+    isDirectory ? file.startsWith(`${itemPath}/`) : file === itemPath;
+  let current = commitsById.get(startingCommitId);
+
+  while (current) {
+    const parent = current.parent ? commitsById.get(current.parent) : undefined;
+    const currentFiles = current.files.filter(matchesItem);
+    const parentFiles = new Set((parent?.files || []).filter(matchesItem));
+    const changed = currentFiles.length !== parentFiles.size ||
+      currentFiles.some((file) => {
+        if (!parentFiles.has(file)) return true;
+        if (!parent) return true;
+        const currentFile = path.join(
+          getGitLiteDir(repositoryRoot),
+          "commits",
+          current!.id,
+          "snapshot",
+          file
+        );
+        const parentFile = path.join(
+          getGitLiteDir(repositoryRoot),
+          "commits",
+          parent.id,
+          "snapshot",
+          file
+        );
+        return !fs.readFileSync(currentFile).equals(fs.readFileSync(parentFile));
+      });
+
+    if (changed) return current;
+    current = parent;
+  }
+
+  return undefined;
+}
+
 export function hasSymlinkInPath(baseDirectory: string, targetPath: string): boolean {
   const relativePath = path.relative(path.resolve(baseDirectory), path.resolve(targetPath));
   if (relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) return true;
@@ -327,6 +396,19 @@ export async function getDirectoryTree(
 
   const entries = fs.readdirSync(targetDir, { withFileTypes: true });
   const items: RepoItem[] = [];
+  const commits = await getAllCommits(root);
+  const commitsById = new Map(commits.map((commit) => [commit.id, commit]));
+  let startingCommitId = commitId || "";
+  if (mode === "project") {
+    const headFile = path.join(getGitLiteDir(root), "HEAD");
+    const branch = fs.existsSync(headFile) ? fs.readFileSync(headFile, "utf-8").trim() : "";
+    const branchCommitFile = branch
+      ? path.join(getGitLiteDir(root), "branches", `${branch}.txt`)
+      : "";
+    startingCommitId = branchCommitFile && fs.existsSync(branchCommitFile)
+      ? fs.readFileSync(branchCommitFile, "utf-8").trim()
+      : "";
+  }
 
   // Exclude node_modules, .git, .next, etc. from top-level clutter
   const hiddenFolders = [".git", "node_modules", ".next", ".gitlite", "out", "frontend"];
@@ -347,31 +429,21 @@ export async function getDirectoryTree(
       } catch {}
     }
 
-    // Realistic commit messages for common project items
-    let lastCommitMsg = "Update " + entry.name;
-    let lastCommitAge = "2 hours ago";
-
-    if (entry.name === "src") {
-      lastCommitMsg = "feat: core GitLite VCS engine architecture with commands and services";
-      lastCommitAge = "3 hours ago";
-    } else if (entry.name === "working") {
-      lastCommitMsg = "docs & tests: add sample files for staging and branch workflow";
-      lastCommitAge = "15 minutes ago";
-    } else if (entry.name === "README.md") {
-      lastCommitMsg = "docs: comprehensive GitLite architecture & terminal usage guide";
-      lastCommitAge = "just now";
-    } else if (entry.name.endsWith(".java")) {
-      lastCommitMsg = `refactor(${entry.name.replace(".java", "")}): optimize file storage and hash verification`;
-      lastCommitAge = "1 hour ago";
-    }
+    const lastCommit = latestCommitForPath(
+      root,
+      commitsById,
+      startingCommitId,
+      relPath,
+      isDir
+    );
 
     items.push({
       name: entry.name,
       path: relPath,
       type: isDir ? "directory" : "file",
       size,
-      lastCommitMessage: lastCommitMsg,
-      lastCommitAge,
+      lastCommitMessage: lastCommit?.message || "Not committed",
+      lastCommitAge: lastCommit ? formatCommitAge(lastCommit.timestamp) : "Not committed",
     });
   }
 

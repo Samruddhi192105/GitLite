@@ -119,13 +119,7 @@ export default function StageCommitModal({
         throw new Error(data.error || "Failed to create file");
       }
 
-      /*
-       * IMPORTANT:
-       * Creating a file must NOT stage or commit it.
-       *
-       * The file should remain in working/ and appear under
-       * "Working Directory".
-       */
+      // New files are staged for review, but this action never commits them.
       if (data.status) {
         setLiveStatus(data.status);
       }
@@ -134,10 +128,7 @@ export default function StageCommitModal({
       setNewFileContent("");
       setShowCreateFile(false);
 
-      /*
-       * Refresh the parent AFTER the file has actually been created.
-       * This makes the status API read the newly-created file.
-       */
+      // Refresh after creation and staging so both lists reflect the new status.
       await refreshStatus();
     } catch (err: any) {
       setError(err.message || "Failed to create file");
