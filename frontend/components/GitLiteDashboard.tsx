@@ -612,7 +612,7 @@ export default function GitLiteDashboard({
                             onClick={() => void syncLocalFolder("push")}
                             disabled={syncing !== null}
                             className="rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-1.5 text-xs font-semibold text-[#c9d1d9] transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:opacity-50"
-                            title="Push local folder changes to the hosted repository"
+                            title="Push local folder changes into working/ and stage them for review"
                           >
                             {syncing === "push"
                               ? "Pushing..."
@@ -784,4 +784,3 @@ export default function GitLiteDashboard({
     </div>
   );
 }
-

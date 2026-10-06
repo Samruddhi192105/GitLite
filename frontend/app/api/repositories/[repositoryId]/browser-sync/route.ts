@@ -369,7 +369,6 @@ export async function POST(
         await fs.rename(path.join(root, "working"), oldWorking);
         let workingMoved = true;
         let stagingMoved = false;
-        let committed = false;
         try {
           await fs.rename(stagingDirectory, oldStaging);
           stagingMoved = true;
@@ -391,47 +390,39 @@ export async function POST(
 
           const stageResult = await runGitLiteCommand(["addall"], root);
           if (!stageResult.success) throw new Error(stageResult.stderr || "Could not stage browser changes.");
-          const commitResult = await runGitLiteCommand(
-            ["commit", "Browser push", "--author-name", session.name, "--author-email", session.email],
-            root
-          );
-          if (!commitResult.success) throw new Error(commitResult.stderr || "Could not commit browser changes.");
-          committed = true;
         } catch (error) {
-          if ((await currentHead(root, state.branch)) !== state.head) committed = true;
-          if (committed) {
-            console.error("Browser push advanced the repository head despite a commit command error:", error);
-          } else {
-            try {
-              if (workingMoved) {
-                await fs.rm(path.join(root, "working"), { recursive: true, force: true });
-                await fs.rename(oldWorking, path.join(root, "working"));
-                workingMoved = false;
-              }
-              if (stagingMoved) {
-                await fs.rm(stagingDirectory, { recursive: true, force: true });
-                await fs.rename(oldStaging, stagingDirectory);
-                stagingMoved = false;
-              }
-            } catch (rollbackError) {
-              throw new AggregateError([error, rollbackError], "Browser push failed and repository rollback was incomplete.");
+          try {
+            if (workingMoved) {
+              await fs.rm(path.join(root, "working"), { recursive: true, force: true });
+              await fs.rename(oldWorking, path.join(root, "working"));
+              workingMoved = false;
             }
-            throw error;
+            if (stagingMoved) {
+              await fs.rm(stagingDirectory, { recursive: true, force: true });
+              await fs.rename(oldStaging, stagingDirectory);
+              stagingMoved = false;
+            }
+          } catch (rollbackError) {
+            throw new AggregateError([error, rollbackError], "Browser push failed and repository rollback was incomplete.");
           }
+          throw error;
         }
         const head = await currentHead(root, state.branch);
         await updateOwnedRepositoryTimestamp(session.userId, repository._id.toString()).catch((timestampError) => {
-          console.error("Browser push committed, but the repository timestamp could not be updated:", timestampError);
+          console.error("Browser push staged changes, but the repository timestamp could not be updated:", timestampError);
         });
         try {
           await fs.rm(oldWorking, { recursive: true, force: true });
-          await fs.rm(stagingDirectory, { recursive: true, force: true });
-          await fs.rename(oldStaging, stagingDirectory);
+          await fs.rm(oldStaging, { recursive: true, force: true });
           await fs.rm(directory, { recursive: true, force: true });
         } catch (cleanupError) {
-          console.error("Browser push committed, but temporary sync files could not be cleaned up:", cleanupError);
+          console.error("Browser push staged changes, but temporary sync files could not be cleaned up:", cleanupError);
         }
-        return NextResponse.json({ success: true, head, message: "Browser folder pushed and committed." });
+        return NextResponse.json({
+          success: true,
+          head,
+          message: "Browser folder pushed and staged. Review the staged files and commit them in GitLite.",
+        });
         } finally {
           await release();
         }

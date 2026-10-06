@@ -53,8 +53,9 @@ Then use **Stage & Commit** to save the uploaded files in GitLite history.
 Repository use is browser-based; users do not need a local GitLite installation.
 In desktop Chrome or Edge, **Clone to folder** downloads the hosted repository
 into a folder you select and explicitly authorize. Use **Push** to upload local
-changes and create a hosted commit, or **Pull** to update the folder with hosted
-changes. Push and Pull must use the same selected folder in that browser.
+changes into `working/` and stage them for review; commit them with **Stage &
+Commit**. Use **Pull** to update the folder with hosted changes. Push and Pull
+must use the same selected folder in that browser.
 GitLite stores the folder handle and last-synced file hashes in browser
 IndexedDB; this state is not shared with another browser or computer. To use a
 second computer, select **Clone to folder** there as well. Pull refuses to

@@ -343,7 +343,7 @@ export async function cloneRepositoryToFolder(repositoryId: string): Promise<str
 export async function pushFolderToRepository(repositoryId: string): Promise<string> {
   const directory = await chooseDirectory();
   await ensurePermission(directory);
-  const state = await loadState(repositoryId);
+  let state = await loadState(repositoryId);
   if (!state || !(await assertSameDirectory(state, directory))) {
     throw new Error("This folder is not cloned for this repository in this browser. Choose Clone first.");
   }
@@ -364,7 +364,12 @@ export async function pushFolderToRepository(repositoryId: string): Promise<stri
       await saveState({ ...state, head: manifest.head, hashes: currentHashes });
       return "The selected folder already matches the hosted repository; sync state has been updated.";
     }
-    throw new Error("The hosted repository has changed since this folder was cloned or last synced. Pull first.");
+    if (mapsEqual(state.hashes, hostedHashes)) {
+      state = { ...state, head: manifest.head, hashes: hostedHashes };
+      await saveState(state);
+    } else {
+      throw new Error("The hosted repository has changed since this folder was cloned or last synced. Pull first.");
+    }
   }
 
   const { sessionId } = await postJson<{ sessionId: string }>(repositoryId, {
