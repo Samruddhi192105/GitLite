@@ -73,28 +73,21 @@ export default function GitLiteDashboard({
   }, [theme]);
 
   // Fetch status
-  const loadStatus = useCallback(async (): Promise<GitStatus | null> => {
+  const loadStatus = useCallback(async () => {
     try {
       const res = await fetch(
         `/api/gitlite/status?repoId=${encodeURIComponent(repositoryId)}`,
-        {
-          cache: "no-store",
-        }
+        { cache: "no-store" }
       );
 
       if (!res.ok) {
         throw new Error("Could not load repository status.");
       }
 
-      const data: GitStatus = await res.json();
-
+      const data = await res.json();
       setStatus(data);
-
-      // Return the freshly fetched status so callers can use it immediately.
-      return data;
     } catch (err) {
       console.error("Error loading status:", err);
-      return null;
     }
   }, [repositoryId]);
 
@@ -134,7 +127,9 @@ export default function GitLiteDashboard({
           queryParams.append("commitId", commitId);
         }
 
-        const res = await fetch(`/api/gitlite/files?${queryParams.toString()}`);
+        const res = await fetch(
+          `/api/gitlite/files?${queryParams.toString()}`
+        );
 
         if (!res.ok) {
           throw new Error("Could not load repository files.");
@@ -150,15 +145,15 @@ export default function GitLiteDashboard({
   );
 
   // Refresh everything
-  const refreshAll = useCallback(async (): Promise<GitStatus | null> => {
-    const [freshStatus] = await Promise.all([
+  // IMPORTANT:
+  // StageCommitModal and InteractiveTerminal expect this callback
+  // to return void | Promise<void>.
+  const refreshAll = useCallback(async (): Promise<void> => {
+    await Promise.all([
       loadStatus(),
       loadCommits(),
       loadFiles(),
     ]);
-
-    // Return the latest status immediately to the caller.
-    return freshStatus;
   }, [loadStatus, loadCommits, loadFiles]);
 
   const runRepositoryAction = useCallback(
@@ -169,14 +164,19 @@ export default function GitLiteDashboard({
         const response = await fetch("/api/gitlite/action", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, repoId: repositoryId }),
+          body: JSON.stringify({
+            ...body,
+            repoId: repositoryId,
+          }),
         });
 
         const result = await response.json();
 
         if (!response.ok || result.success === false) {
           throw new Error(
-            result.stderr || result.error || "Repository action failed."
+            result.stderr ||
+              result.error ||
+              "Repository action failed."
           );
         }
 
@@ -241,7 +241,11 @@ export default function GitLiteDashboard({
     setActionError("");
 
     try {
-      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      for (
+        let batchIndex = 0;
+        batchIndex < batches.length;
+        batchIndex++
+      ) {
         const batch = batches[batchIndex];
 
         setUploadProgress(
@@ -261,7 +265,9 @@ export default function GitLiteDashboard({
         form.set("repoId", repositoryId);
         form.set("paths", JSON.stringify(paths));
 
-        batch.forEach((file) => form.append("files", file, file.name));
+        batch.forEach((file) =>
+          form.append("files", file, file.name)
+        );
 
         const response = await fetch("/api/gitlite/upload", {
           method: "POST",
@@ -272,7 +278,8 @@ export default function GitLiteDashboard({
 
         if (!response.ok) {
           throw new Error(
-            result.error || `Upload batch ${batchIndex + 1} failed.`
+            result.error ||
+              `Upload batch ${batchIndex + 1} failed.`
           );
         }
 
@@ -382,7 +389,6 @@ export default function GitLiteDashboard({
 
   const handleFileMutation = async (path?: string) => {
     await refreshAll();
-
     setSelectedFile(null);
 
     if (!path) return;
@@ -481,7 +487,6 @@ export default function GitLiteDashboard({
     setSelectedFile(null);
     setViewingCommitsHistory(false);
     setActiveTab("code");
-
     loadFiles("", "snapshot", commitId);
   };
 
@@ -769,7 +774,9 @@ export default function GitLiteDashboard({
           repositoryId={repositoryId}
           status={status}
           onClose={() => setStageModalOpen(false)}
-          onRefresh={refreshAll}
+          onRefresh={() => {
+            void refreshAll();
+          }}
         />
       )}
 
@@ -777,3 +784,4 @@ export default function GitLiteDashboard({
     </div>
   );
 }
+
