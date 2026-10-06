@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import confetti from "canvas-confetti";
 import { X, Plus, Check, FileText, AlertCircle } from "lucide-react";
 import { GitStatus } from "@/lib/gitlite";
@@ -9,7 +9,7 @@ interface StageCommitModalProps {
   repositoryId: string;
   status: GitStatus | null;
   onClose: () => void;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
 }
 
 export default function StageCommitModal({
@@ -25,20 +25,64 @@ export default function StageCommitModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep a local copy so the modal can immediately reflect
+  // status changes returned by the backend.
+  const [liveStatus, setLiveStatus] = useState<GitStatus | null>(status);
+
+  // Whenever the parent sends a fresh status, update the modal.
+  useEffect(() => {
+    setLiveStatus(status);
+  }, [status]);
+
+  const refreshStatus = async () => {
+    try {
+      /*
+       * Ask the parent/dashboard to refresh its status.
+       *
+       * The parent is responsible for fetching:
+       * /api/gitlite/status
+       *
+       * We intentionally don't duplicate the status API request here,
+       * because the exact status API contract belongs to the dashboard.
+       */
+      await onRefresh();
+    } catch (err) {
+      console.error("Failed to refresh GitLite status:", err);
+    }
+  };
+
   const handleStageFile = async (file: string) => {
     setLoading(true);
     setError(null);
+
     try {
       const res = await fetch("/api/gitlite/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "stage", file, repoId: repositoryId }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "stage",
+          file,
+          repoId: repositoryId,
+        }),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to stage file");
-      onRefresh();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to stage file");
+      }
+
+      // If the action API returns the new status, use it immediately.
+      if (data.status) {
+        setLiveStatus(data.status);
+      }
+
+      // Then ask the dashboard for the authoritative latest status.
+      await refreshStatus();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Failed to stage file");
     } finally {
       setLoading(false);
     }
@@ -46,13 +90,21 @@ export default function StageCommitModal({
 
   const handleCreateFile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFileName.trim()) return;
+
+    if (!newFileName.trim()) {
+      setError("Please enter a file name.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
+
     try {
       const res = await fetch("/api/gitlite/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           action: "createFile",
           repoId: repositoryId,
@@ -60,14 +112,35 @@ export default function StageCommitModal({
           content: newFileContent,
         }),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create file");
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create file");
+      }
+
+      /*
+       * IMPORTANT:
+       * Creating a file must NOT stage or commit it.
+       *
+       * The file should remain in working/ and appear under
+       * "Working Directory".
+       */
+      if (data.status) {
+        setLiveStatus(data.status);
+      }
+
       setNewFileName("");
       setNewFileContent("");
       setShowCreateFile(false);
-      onRefresh();
+
+      /*
+       * Refresh the parent AFTER the file has actually been created.
+       * This makes the status API read the newly-created file.
+       */
+      await refreshStatus();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Failed to create file");
     } finally {
       setLoading(false);
     }
@@ -78,22 +151,40 @@ export default function StageCommitModal({
       setError("Please write a commit message.");
       return;
     }
+
+    if (stagedFiles.length === 0) {
+      setError("Please stage at least one file before committing.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
+
     try {
       const res = await fetch("/api/gitlite/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           action: "commit",
           repoId: repositoryId,
           message: commitMessage.trim(),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to commit");
 
-      // Celebrate with confetti
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to commit");
+      }
+
+      // If backend returns updated status, use it immediately.
+      if (data.status) {
+        setLiveStatus(data.status);
+      }
+
+      // Celebrate successful commit.
       try {
         confetti({
           particleCount: 80,
@@ -104,19 +195,41 @@ export default function StageCommitModal({
       } catch {}
 
       setCommitMessage("");
-      onRefresh();
+
+      /*
+       * Refresh before closing so the dashboard has the latest
+       * repository state.
+       */
+      await refreshStatus();
+
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Failed to commit");
     } finally {
       setLoading(false);
     }
   };
 
-  const stagedFiles = status?.stagedFiles || [];
-  const workingFiles = status?.workingFiles || [];
-  const unstagedFiles = status?.unstagedFiles
-    || workingFiles.filter((file) => !stagedFiles.includes(file));
+  /*
+   * Always prefer the most recently received status.
+   *
+   * The parent status is still the source of truth, while liveStatus
+   * allows the modal to immediately display status returned by APIs.
+   */
+  const currentStatus = liveStatus ?? status;
+
+  const stagedFiles = currentStatus?.stagedFiles || [];
+
+  const workingFiles = currentStatus?.workingFiles || [];
+
+  /*
+   * Files that are in working/ but aren't staged.
+   *
+   * This is the list that should contain a newly-created file.
+   */
+  const unstagedFiles =
+    currentStatus?.unstagedFiles ||
+    workingFiles.filter((file) => !stagedFiles.includes(file));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
@@ -125,14 +238,20 @@ export default function StageCommitModal({
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#30363d] bg-[#161b22]">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#238636]" />
-            <h3 className="font-semibold text-sm">Commit Changes to GitLite</h3>
+
+            <h3 className="font-semibold text-sm">
+              Commit Changes to GitLite
+            </h3>
+
             <span className="text-[#7d8590] text-xs font-mono">
-              Branch: {status?.currentBranch || "main"}
+              Branch: {currentStatus?.currentBranch || "main"}
             </span>
           </div>
+
           <button
             onClick={onClose}
             className="text-[#7d8590] hover:text-[#e6edf3] p-1 rounded hover:bg-[#21262d]"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -156,8 +275,12 @@ export default function StageCommitModal({
                   <span className="font-semibold text-[#7d8590]">
                     Working Directory ({unstagedFiles.length})
                   </span>
+
                   <button
-                    onClick={() => setShowCreateFile(!showCreateFile)}
+                    onClick={() => {
+                      setError(null);
+                      setShowCreateFile(!showCreateFile);
+                    }}
                     className="text-[#58a6ff] hover:underline flex items-center gap-1 text-[11px]"
                   >
                     <Plus className="w-3 h-3" />
@@ -167,7 +290,10 @@ export default function StageCommitModal({
 
                 {/* Create File Form */}
                 {showCreateFile && (
-                  <form onSubmit={handleCreateFile} className="mb-3 p-2 bg-[#161b22] border border-[#30363d] rounded space-y-2">
+                  <form
+                    onSubmit={handleCreateFile}
+                    className="mb-3 p-2 bg-[#161b22] border border-[#30363d] rounded space-y-2"
+                  >
                     <input
                       type="text"
                       placeholder="e.g. hello.txt"
@@ -176,6 +302,7 @@ export default function StageCommitModal({
                       className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs text-[#e6edf3]"
                       required
                     />
+
                     <textarea
                       rows={2}
                       placeholder="File contents..."
@@ -183,20 +310,27 @@ export default function StageCommitModal({
                       onChange={(e) => setNewFileContent(e.target.value)}
                       className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs text-[#e6edf3]"
                     />
+
                     <div className="flex justify-end gap-1">
                       <button
                         type="button"
-                        onClick={() => setShowCreateFile(false)}
+                        onClick={() => {
+                          setShowCreateFile(false);
+                          setNewFileName("");
+                          setNewFileContent("");
+                          setError(null);
+                        }}
                         className="px-2 py-0.5 rounded text-[#7d8590] hover:text-[#e6edf3]"
                       >
                         Cancel
                       </button>
+
                       <button
                         type="submit"
                         disabled={loading}
-                        className="px-2 py-0.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white font-semibold"
+                        className="px-2 py-0.5 rounded bg-[#238636] hover:bg-[#2ea043] text-white font-semibold disabled:opacity-50"
                       >
-                        Create
+                        {loading ? "Creating..." : "Create"}
                       </button>
                     </div>
                   </form>
@@ -215,12 +349,16 @@ export default function StageCommitModal({
                       >
                         <div className="flex items-center gap-1.5 truncate">
                           <FileText className="w-3.5 h-3.5 text-[#7d8590] shrink-0" />
-                          <span className="font-mono truncate">{file}</span>
+
+                          <span className="font-mono truncate">
+                            {file}
+                          </span>
                         </div>
+
                         <button
                           onClick={() => handleStageFile(file)}
                           disabled={loading}
-                          className="px-2 py-0.5 rounded bg-[#21262d] hover:bg-[#30363d] text-[#58a6ff] border border-[#30363d] font-semibold text-[10px] shrink-0"
+                          className="px-2 py-0.5 rounded bg-[#21262d] hover:bg-[#30363d] text-[#58a6ff] border border-[#30363d] font-semibold text-[10px] shrink-0 disabled:opacity-50"
                         >
                           + Stage
                         </button>
@@ -231,7 +369,7 @@ export default function StageCommitModal({
               </div>
             </div>
 
-            {/* Staged Area in .gitlite/staging */}
+            {/* Staged Area */}
             <div className="border border-[#30363d] rounded-md p-3 bg-[#0d1117]">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-semibold text-[#3fb950] flex items-center gap-1">
@@ -244,8 +382,10 @@ export default function StageCommitModal({
                 {stagedFiles.length === 0 ? (
                   <div className="py-6 text-center text-[#7d8590] text-[11px]">
                     <p>No files currently staged.</p>
+
                     <p className="text-[10px] mt-1 text-[#484f58]">
-                      Click "+ Stage" on any working file to include it in the next commit.
+                      Click "+ Stage" on any working file to include it in the
+                      next commit.
                     </p>
                   </div>
                 ) : (
@@ -256,9 +396,15 @@ export default function StageCommitModal({
                     >
                       <div className="flex items-center gap-1.5 truncate">
                         <FileText className="w-3.5 h-3.5 text-[#3fb950] shrink-0" />
-                        <span className="font-mono text-[#3fb950] truncate">{file}</span>
+
+                        <span className="font-mono text-[#3fb950] truncate">
+                          {file}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono text-[#3fb950]">staged</span>
+
+                      <span className="text-[10px] font-mono text-[#3fb950]">
+                        staged
+                      </span>
                     </div>
                   ))
                 )}
@@ -271,6 +417,7 @@ export default function StageCommitModal({
             <label className="font-semibold text-xs text-[#e6edf3]">
               Commit message:
             </label>
+
             <input
               type="text"
               placeholder="e.g. feat: add authentication login component"
@@ -284,8 +431,10 @@ export default function StageCommitModal({
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-[#30363d] bg-[#161b22]">
           <span className="text-[11px] text-[#7d8590]">
-            Files will be snapshotted and hashed into <code>.gitlite/commits</code>
+            Files will be snapshotted and hashed into{" "}
+            <code>.gitlite/commits</code>
           </span>
+
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
@@ -293,13 +442,21 @@ export default function StageCommitModal({
             >
               Cancel
             </button>
+
             <button
               onClick={handleCommit}
-              disabled={loading || stagedFiles.length === 0 || !commitMessage.trim()}
+              disabled={
+                loading ||
+                stagedFiles.length === 0 ||
+                !commitMessage.trim()
+              }
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 text-white font-semibold shadow-sm transition-colors"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>{loading ? "Committing..." : "Commit changes"}</span>
+
+              <span>
+                {loading ? "Committing..." : "Commit changes"}
+              </span>
             </button>
           </div>
         </div>
