@@ -5,6 +5,14 @@ accounts, isolated repositories, file browsing, staging, commits, and branches.
 Repository metadata and account data are stored in MongoDB; repository files
 and snapshots are stored on the filesystem.
 
+# Screenshots
+
+<img width="959" height="412" alt="1" src="https://github.com/user-attachments/assets/f294d960-1a50-4129-b496-e462c42067d6" />
+
+<img width="959" height="410" alt="2" src="https://github.com/user-attachments/assets/f5cb9c4a-1ae1-4bec-bf36-1e1c09697ddc" />
+
+<img width="959" height="412" alt="3" src="https://github.com/user-attachments/assets/b8a93a1a-2304-4f2a-97d5-82314d9f261b" />
+
 ## Implemented features
 
 - MongoDB-backed registration and sign-in with bcrypt password hashes and
